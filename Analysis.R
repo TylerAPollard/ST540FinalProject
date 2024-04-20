@@ -14,36 +14,202 @@ library(tidyverse)
 bleaching_data <- fread("global_bleaching_environmental.csv", 
                         na.strings = c("", "NA", "nd"))
 
-missing_df <- ddply(bleaching_data, .(Date_Year), summarise,
+## Check sample sizes from paper
+sum(!is.na(bleaching_data$Percent_Bleaching))
+
+# EDA ===========================================================================================
+## Check missing data values for response ----
+nonmissing_byYear <- ddply(bleaching_data, .(Date_Year), summarise,
                     Total = length(Percent_Bleaching),
-                    Non_Missing = sum(!is.na(Percent_Bleaching))) |>
+                    Non_Missing = sum(!is.na(Percent_Bleaching)),
+                    Percent_NotMissing = round(Non_Missing/Total*100, 2)) |>
   arrange(Date_Year)
 
+nonmissing_bySource <- ddply(bleaching_data, .(Data_Source), summarise,
+                           Total = length(Percent_Bleaching),
+                           Non_Missing = sum(!is.na(Percent_Bleaching)),
+                           Percent_NotMissing = round(Non_Missing/Total*100, 2)) |>
+  arrange(Data_Source)
 
-df_2002 <- bleaching_data |> filter(Date_Year == 2002)
-sum(!is.na(df_2002$Percent_Bleaching))
+nonmissing_byYearSource <- ddply(bleaching_data, .(Data_Source, Date_Year), summarise,
+                    Total = length(Percent_Bleaching),
+                    Non_Missing = sum(!is.na(Percent_Bleaching)),
+                    Percent_NotMissing = round(Non_Missing/Total*100, 2)) |>
+  arrange(Data_Source, Date_Year)
 
-df_2002_comments <- bleaching_data |> 
-  filter(Date_Year == 2002) |>
-  select(Percent_Bleaching, Bleaching_Comments)
+ggplot(data = nonmissing_byYearSource) +
+  geom_col(aes(x = Date_Year, y = Non_Missing)) +
+  facet_wrap(~ Data_Source) +
+  theme_bw()
+## Remove Nuryana and Setiawan due to little data
 
-filtered_df <- bleaching_data |>
-  filter(complete.cases(Percent_Bleaching)) |>
-  filter(Date_Year >= 2000)
+## Examine each data source ----
+### AGRRA ----
+AGRRA_df <- bleaching_data |>
+  filter(Date_Year >= 1998) |>
+  filter(Data_Source == "AGRRA") |>
+  arrange(Date_Day, Date_Month, Date_Year, Site_ID, Sample_ID)
+unique(AGRRA_df$Percent_Bleaching)
+AGRRA_depth_df <- ddply(AGRRA_df, .(Site_ID), summarize,
+                        Site_Variance = var(Percent_Bleaching),
+                        Observations_N = length(Percent_Bleaching))
+AGRRA_depth_vary_df <- AGRRA_depth_df |> filter(Site_Variance != 0)
 
-ggplot(data = filtered_df) +
-  geom_histogram(aes(x = Percent_Bleaching))
+AGRRA_df2 <- AGRRA_df |> 
+  filter(Site_ID %in% AGRRA_depth_vary_df$Site_ID)
+AGRRA_depth_df2 <- ddply(AGRRA_df2, .(Site_ID, Date_Day, Date_Month, Date_Year), summarize,
+                        Site_Variance = var(Percent_Bleaching),
+                        Observations_N = length(Percent_Bleaching))
+AGRRA_depth_vary_df2 <- AGRRA_depth_df2 |> filter(Site_Variance != 0)
 
-sum(filtered_df$Percent_Bleaching == 0)
+AGRRA_df3 <- AGRRA_df |> 
+  filter(Site_ID %in% AGRRA_depth_vary_df2$Site_ID) |>
+  arrange(Depth_m)
 
-small_filtered_df <- head(filtered_df, 100)
+plot(AGRRA_df3$Depth_m, AGRRA_df3$Percent_Bleaching)
+cor(AGRRA_df3$Depth_m, AGRRA_df3$Percent_Bleaching, use = "complete.obs")
+## Continuous Percent Bleaching values
+## Multiple samples were taken at same location same day for various depths
+## Only variables that varies across observations from same site and day is depth
+## Possibly aggreate?
 
-sum(!complete.cases(filtered_df$Distance_to_Shore))
-sum(!complete.cases(filtered_df$Exposure))
-sum(!complete.cases(filtered_df$Turbidity))
-sum(!complete.cases(filtered_df$Cyclone_Frequency))
+### Donner ----
+Donner_df <- bleaching_data |>
+  filter(Date_Year >= 1998) |>
+  filter(Data_Source == "Donner") |>
+  arrange(Date_Year, Date_Month, Date_Day, Site_ID, Sample_ID)
+unique(Donner_df$Percent_Bleaching)
+hist(Donner_df$Percent_Bleaching, breaks = 20)
+## Large number of category average values 0, 5.5, 30.5, 75
 
-### Aded commentsss
+sum(is.na(Donner_df$Depth_m))
+# About 1/4 of data has missing depths
+
+Donner_depth_df <- ddply(Donner_df, .(Site_ID), summarize,
+                        Site_Variance = var(Percent_Bleaching),
+                        Observations_N = length(Percent_Bleaching))
+Donner_depth_vary_df <- Donner_depth_df |> filter(Site_Variance != 0) |> filter(!is.na(Site_Variance))
+Donner_df2 <- Donner_df |> 
+  filter(Site_ID %in% Donner_depth_vary_df$Site_ID)
+## Tentatively keep Donner_df as is, but need to address missing depth values
+
+### FRRP ----
+FRRP_df <- bleaching_data |>
+  filter(Date_Year >= 1998) |>
+  filter(Data_Source == "FRRP") |>
+  arrange(Site_ID, Sample_ID, Date_Year, Date_Month, Date_Day)
+unique(FRRP_df$Percent_Bleaching)
+unique(FRRP_df$City_Town_Name)
+## 5 different counties with varying locations within county
+length(unique(FRRP_df$Site_ID))
+hist(FRRP_df$Percent_Bleaching, breaks = 20)
+## Keep FRRP data as is. Good data
+
+### Kumagai ----
+Kumagai_df <- bleaching_data |>
+  filter(Date_Year >= 1998) |>
+  filter(Data_Source == "Kumagai") |>
+  arrange(Site_ID, Sample_ID, Date_Year, Date_Month, Date_Day)
+unique(Kumagai_df$Percent_Bleaching)
+## Notice that percent bleaching is just the middle of each rating
+### ie 0 = 0, 0-10 = 5.5, 11-50 = 30.5, 50-100 = 75
+## May need to exclude due to categorical responses
+
+
+### McClanahan ----
+McClanahan_df <- bleaching_data |>
+  filter(Date_Year >= 1998) |>
+  filter(Data_Source == "McClanahan") |>
+  arrange(Site_ID, Sample_ID, Date_Year, Date_Month, Date_Day)
+unique(McClanahan_df$Percent_Bleaching)
+unique(McClanahan_df$City_Town_Name)
+unique(McClanahan_df$Site_ID)
+## Data is for only 2016
+## Data is complete and appears complete
+## Keep McClanahan as is
+
+
+Reef_Check_df <- bleaching_data |>
+  filter(Date_Year >= 1998) |>
+  filter(Data_Source == "Reef_Check") |>
+  arrange(Site_ID, Date_Year, Date_Month, Date_Day, Sample_ID)
+unique(Reef_Check_df$Percent_Bleaching)
+## Same Sample ID has multiple readings by substrate Name
+Reef_Check_Substrate_df <- ddply(Reef_Check_df, .(Site_ID, Sample_ID), summarize,
+                                 Substrate_Var = var(Percent_Bleaching),
+                                 Observations_N = length(Percent_Bleaching))
+Reef_Check_Substrate_vary_df <- Reef_Check_Substrate_df |> 
+  filter(Substrate_Var != 0) |>
+  filter(!is.na(Substrate_Var))
+## Percent_Bleaching does not vary by sample ID but it does for Percent_Cover
+Reef_Check_df2 <- Reef_Check_df |>
+  distinct(Site_ID, Sample_ID, .keep_all = TRUE)
+## Agregated data appears to be good as is once NAs are removed
+
+
+Safaie_df <- bleaching_data |>
+  filter(Date_Year >= 1998) |>
+  filter(Data_Source == "Safaie") |>
+  arrange(Site_ID, Date_Year, Date_Month, Date_Day, Sample_ID)
+unique(Safaie_df$Percent_Bleaching)
+## Percent_Bleaching appears to be categorically values
+## Recommend remove data source
+
+## Plot Map ----
+complete_data <- bleaching_data |>
+  filter(!is.na(Percent_Bleaching)) |>
+  filter(Data_Source %in% c("AGRRA", "Donner", "FRRP", "McClanahan", "Reef_Check")) |>
+  arrange(Data_Source, Site_ID, Date_Year, Date_Month, Date_Day, Sample_ID)
+
+world_coordinates <- map_data("world") 
+ggplot() + 
+  # geom_map() function takes world coordinates  
+  # as input to plot world map 
+  geom_map( 
+    data = world_coordinates, map = world_coordinates, 
+    aes(x = long, y = lat, map_id = region) 
+  ) + 
+  geom_point(
+    data = complete_data,
+    aes(x = Longitude_Degrees, y = Latitude_Degrees, 
+        color = Percent_Bleaching)
+  ) +
+  scale_color_continuous(low = "green", high = "red") +
+  theme_bw()
+
+## Notice that percent bleaching is just the middle of each rating
+### ie 0 = 0, 0-10 = 5.5, 11-50 = 30.5, 50-100 = 75
+
+## TAKEAWAYS ====
+## ID Variable Hierarchy 
+### Realm_Name > Country_Name > Ecoregion_Name > State_Island_Province_Name > 
+### City_Town_Name > Site _Name(if applicable)
+## SiteID has same lat/lon combinations
+## Only depth, Sample_ID, and Month/Day/Year varies with siteID
+### Same Distance_to_shore, exposure,...,
+### Temperatures may change for Site_ID by date
+## We will choose to only look at data from 2003 and on because 
+## 1. Few data before 1998
+## 2. Data from 1998-2002 had a lot of missing data between(42-62% non-missing)
+##    - Don't feel comfortbale trusting these data sources
+## 3. Data >= 2003 had at least 1000 observations with >82% non-missing
+
+
+## Filter data to >= 2003
+data <- bleaching_data |> 
+  filter(Date_Year >= 2003)
+
+length(unique(data$City_Town_Name))
+length(unique(data$State_Island_Province_Name))
+sum(!is.na(data$Substrate_Name))
+sum(!is.na(data$Percent_Cover))
+sum(!is.na(data$Bleaching_Level))
+
+ddply(data, .(Data_Source), summarize,
+      Total = length(Percent_Bleaching),
+      Recorded_Substrate = sum(!is.na(Substrate_Name)),
+      Recorded_Cover = sum(!is.na(Percent_Cover)),
+      Recorded_Level = sum(!is.na(Bleaching_Level)))
 
 # Analysis ####################################################################################################
 ## Load data ====
