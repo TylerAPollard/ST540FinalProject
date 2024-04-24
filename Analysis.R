@@ -10,6 +10,7 @@ library(rjags)
 library(plyr)
 library(GGally)
 library(tidyverse)
+library(ggplot2)
 
 # Read in Global Bleaching data ----
 bleaching_data <- fread("global_bleaching_environmental.csv", 
