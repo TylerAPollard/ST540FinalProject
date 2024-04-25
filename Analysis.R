@@ -253,9 +253,59 @@ ggpairs(data = final_data1 |>
                  Temperature_Minimum,
                  Temperature_Maximum))
 
-# Analysis ####################################################################################################
+# Analysis #######################################################################################
 ## Load data ====
-### Regression ----
+bleaching_data <- fread("global_bleaching_environmental.csv", 
+                        na.strings = c("", "NA", "nd"))
+
+final_data1 <- bleaching_data |>
+  filter(!is.na(Percent_Bleaching)) |>
+  filter(Data_Source == "Reef_Check") |>
+  distinct(Site_ID, Sample_ID, .keep_all = TRUE)
+
+final_data2 <- final_data1 |> 
+  select(
+    # For ordering
+    Date,
+    # Covariates
+    Latitude_Degrees,
+    Longitude_Degrees,
+    Distance_to_Shore,
+    Exposure,
+    Turbidity,
+    Cyclone_Frequency,
+    Date_Year,
+    Depth_m,
+    ClimSST,
+    SSTA,
+    SSTA_DHW,
+    TSA,
+    TSA_DHW,
+    Windspeed,
+    # Response
+    Percent_Bleaching
+  ) |>
+  filter(Date_Year >= 2003) |>
+  arrange(Date)
+
+### Rachel's Linear Model ----
+
+final_rachel <- final_data2
+Y <- final_rachel$Percent_Bleaching
+X <- subset(final_rachel, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
+X <- as.matrix(X)
+X <- scale(X)
+
+n <- length(Y)
+p <- ncol(X)
+
+data   <- list(Y=Y,X=X,n=n,p=p)
+params1 <- c("alpha", "beta")
+
+burn     <- 1000
+n.iter   <- 5000
+thin     <- 5
+
 
 
 
