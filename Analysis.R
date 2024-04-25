@@ -18,7 +18,7 @@ bleaching_data <- fread("global_bleaching_environmental.csv",
 ## Check sample sizes from paper
 sum(!is.na(bleaching_data$Percent_Bleaching))
 
-# EDA ===========================================================================================
+# EDA ===============================================================================
 ## Check missing data values for response ----
 nonmissing_byYear <- ddply(bleaching_data, .(Date_Year), summarise,
                     Total = length(Percent_Bleaching),
@@ -196,14 +196,14 @@ ggplot() +
 ## Notice that percent bleaching is just the middle of each rating
 ### ie 0 = 0, 0-10 = 5.5, 11-50 = 30.5, 50-100 = 75
 
-## TAKEAWAYS ====
+## TAKEAWAYS ----
 ## ID Variable Hierarchy 
-### Realm_Name > Country_Name > Ecoregion_Name > State_Island_Province_Name > 
-### City_Town_Name > Site _Name(if applicable)
+## Realm_Name > Country_Name > Ecoregion_Name > State_Island_Province_Name > 
+## City_Town_Name > Site _Name (if applicable)
 ## SiteID has same lat/lon combinations
 ## Only depth, Sample_ID, and Month/Day/Year varies with siteID
-### Same Distance_to_shore, exposure,...,
-### Temperatures may change for Site_ID by date
+## Same Distance_to_shore, exposure,...,
+## Temperatures may change for Site_ID by date
 ## We will choose to only look at data from 2003 and on because 
 ## 1. Few data before 1998
 ## 2. Data from 1998-2002 had a lot of missing data between(42-62% non-missing)
@@ -211,9 +211,9 @@ ggplot() +
 ## 3. Data >= 2003 had at least 1000 observations with >82% non-missing
 
 
-## FINAL DATA SET ====================
-### Data Sources to keep
-#### Reef_Check
+## FINAL DATA SET ----
+### Data Sources to keep:
+### Reef_Check
 final_data1 <- bleaching_data |>
   filter(!is.na(Percent_Bleaching)) |>
   filter(Data_Source == "Reef_Check") |>
@@ -253,13 +253,127 @@ ggpairs(data = final_data1 |>
                  Temperature_Minimum,
                  Temperature_Maximum))
 
-# Analysis ####################################################################################################
-## Load data ====
-### Regression ----
+# Analysis ==========================================================================
+## Load data ----
+bleaching_data <- fread("global_bleaching_environmental.csv", 
+                        na.strings = c("", "NA", "nd"))
 
+final_data1 <- bleaching_data |>
+  filter(!is.na(Percent_Bleaching)) |>
+  filter(Data_Source == "Reef_Check") |>
+  distinct(Site_ID, Sample_ID, .keep_all = TRUE)
 
+final_data2 <- final_data1 |> 
+  select(
+    # For ordering
+    Date,
+    # Covariates
+    Latitude_Degrees,
+    Longitude_Degrees,
+    Distance_to_Shore,
+    Exposure,
+    Turbidity,
+    Cyclone_Frequency,
+    Date_Year,
+    Depth_m,
+    ClimSST,
+    SSTA,
+    SSTA_DHW,
+    TSA,
+    TSA_DHW,
+    Windspeed,
+    # Response
+    Percent_Bleaching
+  ) |>
+  filter(Date_Year >= 2003) |>
+  arrange(Date)
 
+# The thingy Tyler told me to add:
+for(i in 1:length(colnames(final_data2))){
+  sum(complete.cases(final_data2[[i]]))
+}
 
+## Model 1: Simple Linear Model (Rachel) ----
+## Modeled with Uninformative Gaussian Priors
+final_rachel <- final_data2
+final_rachel <- na.omit(final_rachel)
+Y <- final_rachel$Percent_Bleaching
+X <- subset(final_rachel, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
+X <- subset(X, select = -c(Turbidity, SSTA, TSA, Windspeed))
+X <- as.matrix(X)
+X <- scale(X)
+
+n <- length(Y)
+p <- ncol(X)
+
+data   <- list(Y=Y,X=X,n=n,p=p)
+params1 <- c("alpha", "beta")
+
+burn     <- 5000
+n.iter   <- 20000
+thin     <- 5
+
+# After running the model below, I removed the following insignificant predictors:
+# Turbidity, SSTA, TSA, and Windspeed.
+# After removal, the model was run again.
+
+model_string <- textConnection("model{
+
+   # Likelihood
+    for(i in 1:n){
+      Y[i]   ~ dnorm(mu[i],tau) 
+      mu[i] <- alpha + inprod(X[i,],beta[]) 
+    } 
+    
+    # Priors  
+    for(j in 1:p){ 
+      beta[j] ~ dnorm(0,0.01) 
+    } 
+      
+    alpha ~  dnorm(0, 0.01) 
+    tau   ~  dgamma(0.1, 0.1) 
+      
+}")
+
+model1 <- jags.model(model_string, data=data, n.chains=2, quiet=TRUE)
+update(model1, burn, progress.bar="none")
+samples1 <- coda.samples(model1, variable.names=params1, n.iter=n.iter, n.thin=thin, progress.bar="none")
+
+summary1 <- summary(samples1)
+summary1
+
+par(mar=c(1,1,1,1)) 
+# ^This is because of the error: "figure margins too large"
+# Unfortunately it makes the plots kinda wonky but at least we can see them.
+plot(samples1)
+
+stats1 <- summary1$statistics
+rownames(stats1) <- c("Intercept", "Latitude", "Longitude",
+                      "Distance to Shore", 
+                      "Cyclone Frequency", "Depth", "ClimSST",
+                      "SSTA_DHW", "TSA_DHW")
+stats1
+
+quantiles1 <- summary1$quantiles
+rownames(quantiles1) <- c("Intercept", "Latitude", "Longitude",
+                          "Distance to Shore", 
+                          "Cyclone Frequency", "Depth", "ClimSST",
+                          "SSTA_DHW", "TSA_DHW")
+quantiles1
+
+# All of the predictors used above were deemed significant.
+
+### Goodness of Fit Checks for Model 1 ----
+### Simple Linear Model with Uninformative Gaussian Priors
+# Checking the effective sample sizes.
+# All effective sample sizes are very high, well over 10,000!
+effectiveSize(samples1)
+
+# R less than 1.1 indicates convergence.
+gelman.diag(samples1)
+
+# abs(z) less than 2 indicates convergence.
+geweke.diag(samples1[[1]])
 
 
 
