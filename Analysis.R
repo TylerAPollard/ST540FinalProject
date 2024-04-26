@@ -378,5 +378,50 @@ geweke.diag(samples1[[1]])
 
 
 
+## Model 2: Beta regression model (Hanan) following most of Rachel's code but with slight modifications to accommodate for the new model----
+## Modeled with Uninformative Gaussian Priors
+final_hanan <- final_data2
+final_hanan <- na.omit(final_hanan)
+Y_1 <- final_hanan$Percent_Bleaching 
+Y <- Y_1 / 100 # Changing response variable to decimal to fit criteria
 
+X <- subset(final_hanan, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
+X <- subset(X, select = -c(Turbidity, SSTA, TSA, Windspeed))
+X <- as.matrix(X)
+X <- scale(X)
+
+n <- length(Y)
+p <- ncol(X)
+
+data   <- list(Y=Y,X=X,n=n,p=p)
+params1 <- c("alpha", "beta")
+
+burn     <- 10000
+n.iter   <- 20000
+thin     <- 5
+
+model_string <- textConnection("model{
+    # Likelihood
+    for(i in 1:n){
+      Y[i] ~ dbeta(mu[i]*phi, (1-mu[i])*phi) 
+      logit(mu[i]) <- alpha + inprod(X[i,], beta[])
+    } 
+    
+    # Priors  
+    for(j in 1:p){ 
+      beta[j] ~ dnorm(0, 0.01) 
+    } 
+      
+    alpha ~ dnorm(0, 0.01) 
+    phi   ~ dgamma(0.1, 0.1) # Shape parameter for beta distribution
+      
+}")
+
+model2 <- jags.model(model_string, data=data, n.chains=2, quiet=TRUE)
+#error persists. i've tried increasing burn in. next objective, is to review priors or perhaps try using a different sampler
+update(model2, burn, progress.bar="none")
+samples1 <- coda.samples(model2, variable.names=params1, n.iter=n.iter, n.thin=thin, progress.bar="none")
+
+summary2 <- summary(samples2)
+summary2
 
