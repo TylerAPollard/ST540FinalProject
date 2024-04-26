@@ -313,7 +313,9 @@ for(i in 1:length(colnames(final_data2))){
 ## Modeled with Uninformative Gaussian Priors
 final_hanan <- final_data2
 final_hanan <- na.omit(final_hanan)
-Y <- final_hanan$Percent_Bleaching 
+Y_1 <- final_hanan$Percent_Bleaching 
+Y <- Y_1 / 100 # Changing response variable to decimal to fit criteria
+
 X <- subset(final_hanan, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
 X <- subset(X, select = -c(Turbidity, SSTA, TSA, Windspeed))
 X <- as.matrix(X)
@@ -325,7 +327,7 @@ p <- ncol(X)
 data   <- list(Y=Y,X=X,n=n,p=p)
 params1 <- c("alpha", "beta")
 
-burn     <- 5000
+burn     <- 10000
 n.iter   <- 20000
 thin     <- 5
 
@@ -348,6 +350,7 @@ model_string <- textConnection("model{
 }")
 
 model1 <- jags.model(model_string, data=data, n.chains=2, quiet=TRUE)
+#error persists. i've tried increasing burn in. next objective, is to review priors
 update(model1, burn, progress.bar="none")
 samples1 <- coda.samples(model1, variable.names=params1, n.iter=n.iter, n.thin=thin, progress.bar="none")
 
