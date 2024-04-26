@@ -304,16 +304,16 @@ final_data3 <- final_data2[complete.cases(final_data2)]
 ## Modeled with Uninformative Gaussian Priors
 final_rachel <- final_data3
 final_rachel <- na.omit(final_rachel)
-Y <- final_rachel$Percent_Bleaching
-X <- subset(final_rachel, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
-X <- subset(X, select = -c(Turbidity, SSTA, TSA, Windspeed))
-X <- as.matrix(X)
-X <- scale(X)
+Y1 <- final_rachel$Percent_Bleaching
+X1 <- subset(final_rachel, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
+X1 <- subset(X1, select = -c(Turbidity, SSTA, TSA, Windspeed))
+X1 <- as.matrix(X1)
+X1 <- scale(X1)
 
-n <- length(Y)
-p <- ncol(X)
+n1 <- length(Y1)
+p1 <- ncol(X1)
 
-data   <- list(Y=Y,X=X,n=n,p=p)
+data1   <- list(Y=Y1,X=X1,n=n1,p=p1)
 params1 <- c("alpha", "beta")
 
 burn     <- 5000
@@ -324,7 +324,7 @@ thin     <- 5
 # Turbidity, SSTA, TSA, and Windspeed.
 # After removal, the model was run again.
 
-model_string <- textConnection("model{
+model_string1 <- textConnection("model{
 
    # Likelihood
     for(i in 1:n){
@@ -342,7 +342,7 @@ model_string <- textConnection("model{
       
 }")
 
-model1 <- jags.model(model_string, data=data, n.chains=2, quiet=TRUE)
+model1 <- jags.model(model_string1, data=data1, n.chains=2, quiet=TRUE)
 update(model1, burn, progress.bar="none")
 samples1 <- coda.samples(model1, variable.names=params1, n.iter=n.iter, n.thin=thin, progress.bar="none")
 
@@ -388,25 +388,25 @@ geweke.diag(samples1[[1]])
 ## Modeled with Uninformative Gaussian Priors
 final_hanan <- final_data3
 final_hanan <- na.omit(final_hanan)
-Y_1 <- final_hanan$Percent_Bleaching 
-Y <- Y_1 / 100 # Changing response variable to decimal to fit criteria
+Y_2 <- final_hanan$Percent_Bleaching 
+Y2 <- Y_2 / 100 # Changing response variable to decimal to fit criteria
 
-X <- subset(final_hanan, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
-X <- subset(X, select = -c(Turbidity, SSTA, TSA, Windspeed))
-X <- as.matrix(X)
-X <- scale(X)
+X2 <- subset(final_hanan, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
+X2 <- subset(X2, select = -c(Turbidity, SSTA, TSA, Windspeed))
+X2 <- as.matrix(X2)
+X2 <- scale(X2)
 
-n <- length(Y)
-p <- ncol(X)
+n2 <- length(Y2)
+p2 <- ncol(X2)
 
-data   <- list(Y=Y,X=X,n=n,p=p)
+data2   <- list(Y=Y2,X=X2,n=n2,p=p2)
 params1 <- c("alpha", "beta")
 
 burn     <- 10000
 n.iter   <- 20000
 thin     <- 5
 
-model_string <- textConnection("model{
+model_string2 <- textConnection("model{
     # Likelihood
     for(i in 1:n){
       Y[i] ~ dbeta(mu[i]*phi, (1-mu[i])*phi) 
@@ -423,10 +423,10 @@ model_string <- textConnection("model{
       
 }")
 
-model2 <- jags.model(model_string, data=data, n.chains=2, quiet=TRUE)
+model2 <- jags.model(model_string2, data=data2, n.chains=2, quiet=TRUE)
 #error persists. i've tried increasing burn in. next objective, is to review priors or perhaps try using a different sampler
 update(model2, burn, progress.bar="none")
-samples1 <- coda.samples(model2, variable.names=params1, n.iter=n.iter, n.thin=thin, progress.bar="none")
+samples2 <- coda.samples(model2, variable.names=params2, n.iter=n.iter, n.thin=thin, progress.bar="none")
 
 summary2 <- summary(samples2)
 summary2
