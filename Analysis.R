@@ -7,13 +7,14 @@
 library(data.table)
 library(MASS)
 library(rjags)
+library(coda)
 library(plyr)
 library(GGally)
 library(tidyverse)
 library(ggplot2)
 
 # Read in Global Bleaching data ----
-bleaching_data <- fread("global_bleaching_environmental.csv", 
+bleaching_data <- fread("Desktop/ST540FinalProject/global_bleaching_environmental.csv", 
                         na.strings = c("", "NA", "nd"))
 
 ## Check sample sizes from paper
@@ -258,7 +259,100 @@ ggpairs(data = final_data1 |>
 ## Load data ====
 ### Regression ----
 
+bleaching_data <- fread("Desktop/ST540FinalProject/global_bleaching_environmental.csv", 
+                        na.strings = c("", "NA", "nd"))
 
+final_data1 <- bleaching_data |>
+  filter(!is.na(Percent_Bleaching)) |>
+  filter(Data_Source == "Reef_Check") |>
+  distinct(Site_ID, Sample_ID, .keep_all = TRUE)
+
+final_data2 <- final_data1 |> 
+  select(
+    # For ordering
+    Date,
+    # Covariates
+    Latitude_Degrees,
+    Longitude_Degrees,
+    Distance_to_Shore,
+    Exposure,
+    Turbidity,
+    Cyclone_Frequency,
+    Date_Year,
+    Depth_m,
+    ClimSST,
+    SSTA,
+    SSTA_DHW,
+    TSA,
+    TSA_DHW,
+    Windspeed,
+    # Response
+    Percent_Bleaching
+  ) |>
+  filter(Date_Year >= 2003) |>
+  arrange(Date)
+
+# The thingy Tyler told me to add:
+for(i in 1:length(colnames(final_data2))){
+  sum(complete.cases(final_data2[[i]]))
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Model 2: Beta regression model (Hanan) following most of Rachel's code but with slight modifications to accommodate for the new model----
+## Modeled with Uninformative Gaussian Priors
+final_hanan <- final_data2
+final_hanan <- na.omit(final_hanan)
+Y <- final_hanan$Percent_Bleaching 
+X <- subset(final_hanan, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
+X <- subset(X, select = -c(Turbidity, SSTA, TSA, Windspeed))
+X <- as.matrix(X)
+X <- scale(X)
+
+n <- length(Y)
+p <- ncol(X)
+
+data   <- list(Y=Y,X=X,n=n,p=p)
+params1 <- c("alpha", "beta")
+
+burn     <- 5000
+n.iter   <- 20000
+thin     <- 5
+
+model_string <- textConnection("model{
+
+    # Likelihood
+    for(i in 1:n){
+      Y[i] ~ dbeta(mu[i]*phi, (1-mu[i])*phi) 
+      logit(mu[i]) <- alpha + inprod(X[i,], beta[])
+    } 
+    
+    # Priors  
+    for(j in 1:p){ 
+      beta[j] ~ dnorm(0, 0.01) 
+    } 
+      
+    alpha ~ dnorm(0, 0.01) 
+    phi   ~ dgamma(0.1, 0.1) # Shape parameter for beta distribution
+      
+}")
+
+model1 <- jags.model(model_string, data=data, n.chains=2, quiet=TRUE)
+update(model1, burn, progress.bar="none")
+samples1 <- coda.samples(model1, variable.names=params1, n.iter=n.iter, n.thin=thin, progress.bar="none")
+
+summary1 <- summary(samples1)
+summary1
 
 
 
