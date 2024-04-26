@@ -290,13 +290,19 @@ final_data2 <- final_data1 |>
   arrange(Date)
 
 # The thingy Tyler told me to add:
+missingValues <- c()
 for(i in 1:length(colnames(final_data2))){
-  sum(complete.cases(final_data2[[i]]))
+  missingValues[i] <- sum(is.na(final_data2[[i]]))
 }
+names(missingValues) <- colnames(final_data2)
+missingValues
+
+# Remove rows with missing predictors values
+final_data3 <- final_data2[complete.cases(final_data2)]
 
 ## Model 1: Simple Linear Model (Rachel) ----
 ## Modeled with Uninformative Gaussian Priors
-final_rachel <- final_data2
+final_rachel <- final_data3
 final_rachel <- na.omit(final_rachel)
 Y <- final_rachel$Percent_Bleaching
 X <- subset(final_rachel, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
@@ -380,7 +386,7 @@ geweke.diag(samples1[[1]])
 
 ## Model 2: Beta regression model (Hanan) following most of Rachel's code but with slight modifications to accommodate for the new model----
 ## Modeled with Uninformative Gaussian Priors
-final_hanan <- final_data2
+final_hanan <- final_data3
 final_hanan <- na.omit(final_hanan)
 Y_1 <- final_hanan$Percent_Bleaching 
 Y <- Y_1 / 100 # Changing response variable to decimal to fit criteria
