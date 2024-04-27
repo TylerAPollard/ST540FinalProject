@@ -136,13 +136,13 @@ n1train <- length(Y1train)
 p1 <- ncol(X1train)
 
 ## Test models with this these simulation variables:
-# burn <- 500
-# n.iters <- 1000
-# thin <- 5
+burn <- 500
+n.iters <- 1000
+thin <- 5
 ## We will increase to final model
-burn     <- 5000
-n.iter   <- 10000
-thin     <- 5
+# burn     <- 5000
+# n.iter   <- 10000
+# thin     <- 5
 
 ## Define Model ----
 model_string1 <- textConnection("model{
