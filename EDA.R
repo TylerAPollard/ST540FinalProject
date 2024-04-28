@@ -300,3 +300,9 @@ ggpairs(data = final_data1 |>
 ### Filter Data 3 ----
 # Remove rows with missing predictors values
 final_data3 <- final_data2[complete.cases(final_data2)]
+
+
+
+
+
+
