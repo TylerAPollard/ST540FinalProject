@@ -367,7 +367,6 @@ file.remove("Model 1 WAIC.Rdata")
 # rm(list=setdiff(ls(), c("bleaching_data", "final_data3")))
 
 ## Cross Validation ----
-
 # Observed data
 Y1o <- Y1[trainIndex] # Observed (Y1train)
 X1o <- X1[trainIndex,] # Observed (X1train)
@@ -423,7 +422,7 @@ samps1       <- samp1_cv[[1]]
 Yp.samps1    <- samps1[,1:n1p] 
 alpha.samps1 <- samps1[,n1p+1]
 beta.samps1  <- samps1[,n1p+1+1:p1]
-sigma.samps  <- samps1[,ncol(samps1)]
+sigma.samps1  <- samps1[,ncol(samps1)]
 
 # Beta means
 beta.mn1  <- colMeans(beta.samps)
