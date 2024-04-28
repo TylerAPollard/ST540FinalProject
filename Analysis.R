@@ -366,6 +366,133 @@ file.remove("Model 1 WAIC.Rdata")
 # Remove data to free up space in environment (we can load it later to compare models)
 # rm(list=setdiff(ls(), c("bleaching_data", "final_data3")))
 
+## Cross Validation ----
+
+# Observed data
+Y1o <- Y1[trainIndex] # Observed (Y1train)
+X1o <- X1[trainIndex,] # Observed (X1train)
+
+# Set aside for prediction
+Y1p <- Y1[-trainIndex] # For prediction (Y1test)
+X1p <- X1[-trainIndex,] # For prediction (X1test)
+
+n1o    <- length(Y1o)
+n1p    <- length(Y1p)
+p1     <- ncol(X1o)
+
+# Model below
+model_string <- "model{
+
+  # Likelihood
+  for(i in 1:n1o){
+    Y1o[i]   ~ dnorm(muo[i],tau)
+    muo[i] <- alpha + inprod(X1o[i,],beta[])
+  }
+
+  # Prediction
+  for(i in 1:n1p){
+    Y1p[i]  ~ dnorm(mup[i],tau)
+    mup[i] <- alpha + inprod(X1p[i,],beta[])
+  }
+
+  # Priors
+  for(j in 1:p1){
+    beta[j] ~ dnorm(0,0.01)
+  }
+  
+  alpha  ~ dnorm(0, 0.01)
+  tau    ~  dgamma(0.1, 0.1) 
+  sigma  <- 1/sqrt(tau)
+  
+}"
+
+# NOTE: Y1p is not sent to JAGS!
+model1_cv <- jags.model(textConnection(model_string), 
+                    data = list(Y1o=Y1o,n1o=n1o,n1p=n1p,p1=p1,X1o=X1o,X1p=X1p))
+update(model, 10000, progress.bar="none")
+samp1_cv <- coda.samples(model, 
+                     variable.names=c("alpha", "beta", "Y1p"), 
+                     n.iter=20000, progress.bar="text")
+
+# Summary
+summary1_cv <- summary(samp[,-c(1:n1p)])
+summary1_cv
+
+# Extract the samples for each parameter
+samps1       <- samp1_cv[[1]]
+Yp.samps1    <- samps1[,1:n1p] 
+alpha.samps1 <- samps1[,n1p+1]
+beta.samps1  <- samps1[,n1p+1+1:p1]
+sigma.samps  <- samps1[,ncol(samps1)]
+
+# Beta means
+beta.mn1  <- colMeans(beta.samps)
+beta.mn1
+
+# Sigma mean
+sigma.mn1 <- mean(sigma.samps)
+sigma.mn1
+
+# Alpha (intercept) mean
+alpha.mn1 <- mean(alpha.samps)
+alpha.mn1
+
+# Graphical representation of plug-in vs PPD vs truth
+# Only graphing the first few!
+for(j in 1:10){
+  
+  # Plug-in
+  mu <- alpha.mn1+sum(X1p[j,]*beta.mn1)
+  y  <- rnorm(20000,mu,sigma.mn1)
+  plot(density(y),col=2,xlab="Y",main="PPD")
+  
+  # PPD
+  lines(density(Yp.samps1[,j]))
+  
+  # Truth
+  abline(v=Y1p[j],col=3,lwd=2)
+  
+  legend("topright",c("PPD","Plug-in","Truth"),col=1:3,lty=1,inset=0.05)
+}
+
+# Remove plots if it is bogging down environment
+dev.off()
+
+# Create empty data frames to store values
+df_mu1   <- data.frame()
+df_low1  <- data.frame()
+df_high1 <- data.frame()
+
+# Looping through values to calculate the mean and credible interval
+for(j in 1:n1p){
+  mu   <- alpha.mn1 + sum(X1p[j,]*beta.mn1)
+  low  <- mu - 1.96*sigma.mn1 
+  high <- mu + 1.96*sigma.mn1
+  
+  df_mu1   <- rbind(df_mu1, mu)
+  df_low1  <- rbind(df_low1, low)
+  df_high1 <- rbind(df_high1, high)
+}
+
+# Predictions baby!!!!!
+df_cv1_pred <- cbind(df_mu1, df_low1, df_high1)
+
+# Creating vectors of the predictions and actual values
+df_mu1 <- as.matrix(df_mu1)
+Y1p <- as.matrix(Y1p)
+
+# Create empty data frame to store values
+est1 <- data.frame()
+
+# Looping through and taking the abs difference of the two vectors
+for(i in 1:n1p){
+  diff <- abs(Y1p[i]-df_mu1[i])
+  est1  <- rbind(est1, diff)
+}
+
+# First column of the est1 data frame has wonky name
+mean_abs_error <- mean(est1$X5.43069500446891)
+mean_abs_error
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## Model 2: Beta Regression Model (Hanan) ----
