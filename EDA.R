@@ -290,16 +290,84 @@ final_data2 <- final_data1 |>
   ) |>
   arrange(Date)
 
-ggpairs(data = final_data1 |> 
-          select(ClimSST,
-                 Temperature_Kelvin,
-                 Temperature_Mean,
-                 Temperature_Minimum,
-                 Temperature_Maximum))
-
 ### Filter Data 3 ----
 # Remove rows with missing predictors values
 final_data3 <- final_data2[complete.cases(final_data2)]
+final_data3$Percent_Bleaching_Open <- 
+  ifelse(final_data3$Percent_Bleaching == 0, 0.001, 
+         ifelse(final_data3$Percent_Bleaching == 100, 99.999, final_data3$Percent_Bleaching))
+final_data3$Percent_Bleaching_log <- log(final_data3$Percent_Bleaching_Open)
+
+### Create training/test index vector ----
+## for CV and testing model performance and fit
+set.seed(52)
+trainIndex <- createDataPartition(final_data3$Percent_Bleaching,
+                                  p = 0.75,
+                                  list = FALSE)
+trainIndex <- as.vector(trainIndex)
+
+## EDA for Cleaned Data ----
+byYearfun <- function(x){
+  mean(x)
+}
+byYear_EDA <- ddply(final_data3, .(Date_Year), summarize,
+                    ClimSST = byYearfun(ClimSST),
+                    MedClimSST = median(ClimSST),
+                    SSTA = byYearfun(SSTA),
+                    SSTA_DHW = byYearfun(SSTA_DHW),
+                    TSA = byYearfun(TSA),
+                    TSA_DHW = byYearfun(TSA_DHW),
+                    Percent_Bleaching = byYearfun(Percent_Bleaching))
+
+temp_data <- final_data3 |> select(
+  ClimSST,
+  SSTA,
+  SSTA_DHW,
+  TSA,
+  TSA_DHW,
+  Percent_Bleaching
+)
+ggpairs(temp_data)
+
+temp_data2U <- final_data3 |>
+  filter(TSA_DHW >= 20)
+temp_data2L <- final_data3 |>
+  filter(TSA_DHW < 20)
+
+
+ggplot() +
+  geom_density(data = final_data3,
+               aes(x = Percent_Bleaching, color = factor(Date_Year)), linewidth = 1) +
+  theme_bw()
+
+ggplot() +
+  geom_density(data = final_data3,
+               aes(x = log(Percent_Bleaching), color = factor(Date_Year)), linewidth = 1) +
+  theme_bw()
+
+unique(final_data3$City_Town_Name)
+ddply(final_data3, .(Date_Year), summarize,
+      Obs = length(Percent_Bleaching),
+      Mean = mean(Percent_Bleaching))
+
+world_coordinates <- map_data("county") 
+ggplot() + 
+  # geom_map() function takes world coordinates  
+  # as input to plot world map 
+  geom_map( 
+    data = world_coordinates, map = world_coordinates, 
+    aes(x = long, y = lat, map_id = region) 
+  ) + 
+  geom_point(
+    data = final_data3,
+    aes(x = Longitude_Degrees, y = Latitude_Degrees, 
+        color = Percent_Bleaching)
+  ) +
+  xlim(c(-85,-77.5)) +
+  ylim(c(23,32.5)) +
+  scale_color_continuous(low = "green", high = "red") +
+  facet_wrap(vars(City_Town_Name)) +
+  theme_bw()
 
 
 
