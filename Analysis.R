@@ -15,6 +15,7 @@ library(tidyverse)
 library(caret)
 library(tictoc)
 
+
 # Clean data for all Models----
 ## Original Data ----
 bleaching_data <- fread("global_bleaching_environmental.csv", 
@@ -141,9 +142,9 @@ p1 <- ncol(X1train)
 # n.iter <- 1000
 # thin <- 5
 ## We will increase to final model
-burn     <- 10000
-n.iter   <- 50000
-thin     <- 10
+burn     <- 5000
+n.iter   <- 10000
+thin     <- 5
 
 ## Define Model ----
 model_string1 <- textConnection("model{
@@ -216,6 +217,12 @@ save(
   ),
   file = filename1
 )
+
+setdiff(
+  ls(.GlobalEnv), 
+  c("bleaching_data", "final_data1", "final_data2")
+)
+
 # Use this if R session terminates
 # load(file = "Model 1 Fit Data.RData")
 
@@ -350,8 +357,12 @@ WAIC1
 P1
 
 ## FINAL SAVE ----
-save(list = setdiff(ls(.GlobalEnv), c("waic1", "like1")),
-     file = filename1)
+save(list = setdiff(
+  ls(.GlobalEnv), 
+  c("waic1", "like1", "bleaching_data", "final_data1", "final_data2")
+),
+file = filename1
+)
 
 # Delete the other previous RData files now to push to GitHub
 file.remove("Model 1 DIC.Rdata")
