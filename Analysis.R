@@ -107,9 +107,8 @@ Y1lognonzero <- Y1log[!zeroindex]
 
 ### Covariate Matrix ----
 ## Variables removed were from multiple linear regression with no random
-## effects. Feel Free to modify this X1 for your specific model if needed
-## but rename it X2 for model and so on. Same with Y's just to avoid
-## writing over someone 
+## effects. Variables that were removed below were removed for 
+## convenience or because they were insignificant (like Windspeed).
 X1 <- final_data3 |> 
   select(-c(
     Date,
@@ -120,9 +119,10 @@ X1 <- final_data3 |>
     ClimSST,
     SSTA,
     SSTA_DHW,
+    Windspeed,
     Percent_Bleaching
   ))
-#X1$Exposure <- ifelse(X1$Exposure == "Sheltered", 0, 1)
+# X1$Exposure <- ifelse(X1$Exposure == "Sheltered", 0, 1)
 X1 <- scale(X1)
 
 #### Split Data ----
@@ -132,17 +132,18 @@ X1train <- X1[trainIndex,]
 X1test <- X1[-trainIndex,]
 
 ## Simulation Variables ----
+n1 <- length(Y1)
 n1train <- length(Y1train)
 p1 <- ncol(X1train)
 
 ## Test models with this these simulation variables:
-burn <- 500
-n.iters <- 1000
-thin <- 5
+# burn <- 500
+# n.iter <- 1000
+# thin <- 5
 ## We will increase to final model
-# burn     <- 5000
-# n.iter   <- 10000
-# thin     <- 5
+burn     <- 10000
+n.iter   <- 50000
+thin     <- 10
 
 ## Define Model ----
 model_string1 <- textConnection("model{
@@ -225,6 +226,7 @@ save(
 # mcmc_trace(samples1)
 # mcmc_rank_overlay(samples1)
 # dimnames(samples1)
+par(mar=c(1,1,1,1))
 plot(samples1)
 
 # Remove plots if it is bogging down environment
@@ -356,12 +358,12 @@ file.remove("Model 1 DIC.Rdata")
 file.remove("Model 1 WAIC.Rdata")
 
 # Remove data to free up space in environment (we can load it later to compare models)
-rm(list=setdiff(ls(), c("bleaching_data", "final_data3")))
+# rm(list=setdiff(ls(), c("bleaching_data", "final_data3")))
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-## Model 2: Beta regression model (Hanan) ----
-## following most of Rachel's code but with slight modifications to accommodate for the new model
+## Model 2: Beta Regression Model (Hanan) ----
+## Following most of Rachel's code but with slight modifications to accommodate for the new model
 ## Modeled with Uninformative Gaussian Priors
 final_hanan <- final_data3
 final_hanan <- na.omit(final_hanan)
@@ -569,7 +571,7 @@ rm(list=setdiff(ls(), c("bleaching_data", "final_data3")))
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-## Model 3: Exponential regression model (Tyler) ----
+## Model 3: Exponential Regression Model (Tyler) ----
 ## Modeled with Uninformative Gaussian Priors
 final_tyler <- final_data3
 Y3 <- final_tyler$Percent_Bleaching
