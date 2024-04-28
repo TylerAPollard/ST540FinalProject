@@ -142,9 +142,9 @@ p1 <- ncol(X1train)
 # n.iter <- 1000
 # thin <- 5
 ## We will increase to final model
-burn     <- 5000
-n.iter   <- 10000
-thin     <- 5
+burn     <- 10000
+n.iter   <- 50000
+thin     <- 10
 
 ## Define Model ----
 model_string1 <- textConnection("model{
@@ -216,11 +216,6 @@ save(
     c("bleaching_data", "final_data1", "final_data2")
   ),
   file = filename1
-)
-
-setdiff(
-  ls(.GlobalEnv), 
-  c("bleaching_data", "final_data1", "final_data2")
 )
 
 # Use this if R session terminates
