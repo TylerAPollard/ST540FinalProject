@@ -17,6 +17,8 @@ library(tidyverse)
 library(tictoc)
 library(brms)
 library(BayesFactor)
+library(tidybayes)
+library(bayesanova)
 
 
 # Clean data for all Models----
@@ -83,12 +85,14 @@ trainIndex <- as.vector(trainIndex)
 ## Modeled with Uninformative Gaussian Priors
 
 ## Load Data ----
-### Closed Support Data ----
 ## Y2 is original data with closed support [0,100]
-Y2 <- final_data3$Percent_Bleaching_Open
+Y2 <- final_data3$Percent_Bleaching
 Y2 <- Y2 / 100 # Changing response variable to decimal to fit criteria
 mean(Y2)
 sd(Y2)
+
+## Use this for Beta regression
+Y2open <- final_data3$Percent_Bleaching_Open/100
 
 ### Covariate Matrix ----
 ## Variables removed were from multiple linear regression with no random
@@ -118,8 +122,8 @@ X2unscale <- X2
 X2 <- scale(X2)
 
 #### Split Data ----
-Y2train <- Y2[trainIndex]
-Y2test <- Y2[-trainIndex]
+Y2train <- Y2open[trainIndex]
+Y2test <- Y2open[-trainIndex]
 X2train <- X2[trainIndex,]
 X2test <- X2[-trainIndex,]
 
@@ -140,7 +144,8 @@ model_data <- cbind(
   Percent_Bleaching = Y2train
 )
 model_data <- data.frame(model_data)
-zero_beta_fit <- brm(
+
+beta_fit <- brm(
   Percent_Bleaching ~ .,
   data = model_data,
   family = Beta(),
@@ -153,11 +158,12 @@ zero_beta_fit <- brm(
   seed = 52
 )
 
-summary(zero_beta_fit)
+summary(beta_fit)
 
-zero_beta_fit_draws <- as_draws(zero_beta_fit)
+beta_fit_draws <- as_draws(beta_fit)
 
-Yppd <- posterior_predict(zero_beta_fit, newdata = X2test)
+Yppc <- post
+Yppd <- posterior_predict(beta_fit, newdata = X2test)
 
 ppc_density_plot2 <- 
   ppc_dens_overlay(Y2train, Yppd) +
@@ -196,14 +202,8 @@ predStats2B
 ## Modeled with Uninformative Gaussian Priors
 
 ## Load Data ----
-### Closed Support Data ----
-## Y2closed is original data with closed support [0,100]
-## Used for zero inflated otherwixe use open
-Y2closed <- final_data3$Percent_Bleaching
-Y2 <- Y2 / 100 # Changing response variable to decimal to fit criteria
-
 ## Y2open is original data with closed support (0,100)
-Y2 <- ifelse(Y2 == 1, 0.999, Y2)
+Y2zero <- ifelse(Y2 == 1, 0.9999, Y2)
 mean(Y2)
 sd(Y2)
 
@@ -235,8 +235,8 @@ X2unscale <- X2
 X2 <- scale(X2)
 
 #### Split Data ----
-Y2train <- Y2[trainIndex]
-Y2test <- Y2[-trainIndex]
+Y2train <- Y2zero[trainIndex]
+Y2test <- Y2zero[-trainIndex]
 X2train <- X2[trainIndex,]
 X2test <- X2[-trainIndex,]
 
@@ -257,19 +257,6 @@ model_data <- cbind(
   Percent_Bleaching = Y2train
 )
 model_data <- data.frame(model_data)
-
-zero_inflated_fit <- brm(
-  Percent_Bleaching ~ .,
-  data = model_data,
-  family = Beta(),
-  save_pars = save_pars(all = TRUE),
-  chains = 2,
-  iter = n.iters2,
-  warmup = burn2,
-  thin = thin2,
-  cores = 2,
-  seed = 52
-)
 
 zero_inflated_beta_fit <- brm(
   Percent_Bleaching ~ .,
