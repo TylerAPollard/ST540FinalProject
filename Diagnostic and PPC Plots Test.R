@@ -22,16 +22,249 @@ load("Model 1 Draws.RData")
 # Old Plots ----
 ## Closed Support Densities ----
 ### Percent_Bleaching ----
+Y <- final_data3 |> pull(Percent_Bleaching)
+Y <- Y/100
+Nonzer0 <- final_data3 |> filter(Percent_Bleaching != 0) |> pull(Percent_Bleaching)
+Nonzer0 <- Nonzer0/100
+mean(Nonzer0/100)
+sd(Nonzer0/100)
+var(Nonzer0/100)
+Nonzer0B <- log(Nonzer0)
+Nonzer0C <- log(Nonzer0 + var(Nonzer0)/2)
+
+curve(dnorm(x, mean(Y), sd(Y)))
+curve(dnorm(x, mean(Nonzer0), sd(Nonzer0)))
+curve(dnorm(x, mean(Nonzer0B), sd(Nonzer0B)))
+curve(dnorm(x, mean(Nonzer0C), sd(Nonzer0C)))
+
+curve(dnorm(x, mean(log(Y)), sd(log(Y))))
+curve(dnorm(x, mean(log(Nonzer0)), sd(log(Nonzer0))))
+curve(dnorm(x, mean(log(Nonzer0B)), sd(log(Nonzer0B))))
+curve(dnorm(x, mean(Nonzer0C), sd(Nonzer0C)))
+
 ggplot() +
-  geom_histogram(data = final_data3,
-                 aes(x = Percent_Bleaching, after_stat(density)),
-                 color = "black", fill = "blue",
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = Y, after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = Y),
+    color = "#007C7C", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = Nonzer0, after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = Nonzer0),
+    color = "#007C7C", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = Nonzer0B, after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = Nonzer0B),
+    color = "#007C7C", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+                 aes(x = Nonzer0C, after_stat(density)),
+                 color = "#99c7c7", fill = "#bcdcdc",
                  bins = 100) +
-  geom_density(data = final_data3,
-               aes(x = Percent_Bleaching),
-               color = "red",
+  geom_density(#data = final_data3,
+               aes(x = Nonzer0C),
+               color = "#007C7C", 
                linewidth = 1) +
-  theme_bw()
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = log(Nonzer0B + var(Nonzer0B)/2), after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = log(Nonzer0B + var(Nonzer0B)/2)),
+    color = "#007C7C", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+##### Back
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = exp(Nonzer0C), after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = exp(Nonzer0C)),
+    color = "#007C7C", 
+    linewidth = 1) +
+  geom_density(#data = final_data3,
+    aes(x = Nonzer0),
+    color = "red", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = exp(Nonzer0), after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = Nonzer0),
+    color = "#007C7C", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = Nonzer0B, after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = Nonzer0B),
+    color = "#007C7C", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = Nonzer0C, after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = Nonzer0C),
+    color = "#007C7C", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+ggplot() +
+  geom_histogram(#data = final_data3 |> filter(Percent_Bleaching != 0),
+    aes(x = log(Nonzer0B + var(Nonzer0B)/2), after_stat(density)),
+    color = "#99c7c7", fill = "#bcdcdc",
+    bins = 100) +
+  geom_density(#data = final_data3,
+    aes(x = log(Nonzer0B + var(Nonzer0B)/2)),
+    color = "#007C7C", 
+    linewidth = 1) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.05))) +
+  #scale_x_continuous(limits = c(-0.5,1)) +
+  labs(title = "Density Plot of Percent Bleaching from 2,394 Coral Reef Samples",
+       subtitle = "Data was Collected by the Florida Reef Resilience Program from 2006 to 2016",
+       x = "Percent Bleaching",
+       y = "Density") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+
+
+
+
+
+
+
 
 #### by Date_Year ----
 ggplot() +
@@ -60,11 +293,11 @@ final_data3$Percent_Bleaching_Open <-
 ### Percent_Bleaching ----
 ggplot() +
   geom_histogram(data = final_data3,
-                 aes(x = Percent_Bleaching_Open, after_stat(density)),
+                 aes(x = Percent_Bleaching_Log, after_stat(density)),
                  color = "black", fill = "blue",
                  bins = 100) +
   geom_density(data = final_data3,
-               aes(x = Percent_Bleaching_Open),
+               aes(x = Percent_Bleaching_Log),
                color = "red",
                linewidth = 1) +
   theme_bw()
@@ -178,5 +411,14 @@ mcmc_combo(draws2, regex_pars = c("alpha", "beta"),
            combo = c("dens_overlay", "trace")) +
   scale_color_manual(values = c("red","blue")) +
   theme_bw()
+
+
+
+
+
+
+
+
+
 
 

@@ -6,13 +6,14 @@
 # Load Libraries ----
 library(data.table)
 library(MASS)
+library(caret)
+library(posterior)
 library(bayesplot)
 library(rstanarm)
 library(rjags)
 library(plyr)
 library(GGally)
 library(tidyverse)
-library(caret)
 library(tictoc)
 
 
@@ -77,39 +78,11 @@ trainIndex <- as.vector(trainIndex)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Model 1: Simple Linear Model =====
-## Programmer: Rachel
 ## Modeled with Uninformative Gaussian Priors
 
 ## Load Data ----
-### Closed Support Data ----
 ## Y1 is original data with closed support [0,100]
 Y1 <- final_data3$Percent_Bleaching
-mean(Y1)
-sd(Y1)
-zeroindex <- Y1 == 0
-
-## We may not need to use these but could be interesting to model data
-## separately like in a hierarchical model
-Y1zero <- Y1[zeroindex]
-Y1nonzero <- Y1[!zeroindex]
-
-### Open Support Data ----
-## Change 0's to 0.00001 and 1's to 0.99999 to avoid infinite density
-## Y1B is original data to have open support (0,100) 
-Y1B <- ifelse(Y1 == 0, 0.001, 
-              ifelse(Y1 == 100, 99.999, Y1))
-mean(Y1B)
-sd(Y1B)
-Y1Bzero <- Y1B[zeroindex]
-Y1Bnonzero <- Y1B[!zeroindex]
-
-### Log Transformed Data ----
-## Y1log is the log of the open supported Y
-Y1log <- log(Y1B)
-mean(Y1log)
-sd(Y1log)
-Y1logzero <- Y1log[zeroindex]
-Y1lognonzero <- Y1log[!zeroindex]
 
 ### Covariate Matrix ----
 ## Variables removed were from multiple linear regression with no random
@@ -126,20 +99,26 @@ X1 <- final_data3 |>
     SSTA,
     SSTA_DHW,
     Windspeed,
-    Percent_Bleaching
+    Percent_Bleaching,
+    Percent_Bleaching_Open,
+    Percent_Bleaching_Log
   ))
 # X1$Exposure <- ifelse(X1$Exposure == "Sheltered", 0, 1)
 X1 <- scale(X1)
 
 #### Split Data ----
+# Observed data
 Y1train <- Y1[trainIndex]
-Y1test <- Y1[-trainIndex]
 X1train <- X1[trainIndex,]
+
+# Set aside for prediction
+Y1test <- Y1[-trainIndex]
 X1test <- X1[-trainIndex,]
 
 ## Simulation Variables ----
 n1 <- length(Y1)
 n1train <- length(Y1train)
+n1test <- length(Y1test)
 p1 <- ncol(X1train)
 
 ## Test models with this these simulation variables:
@@ -147,9 +126,9 @@ p1 <- ncol(X1train)
 # n.iter <- 1000
 # thin <- 5
 ## We will increase to final model
-burn     <- 5000
-n.iter   <- 10000
-thin     <- 5
+burn1     <- 5000
+n.iters1   <- 10000
+thin1     <- 5
 
 ## Define Model ----
 model_string1 <- textConnection("model{
@@ -159,7 +138,7 @@ model_string1 <- textConnection("model{
     mu[i] <- alpha + inprod(X[i,],beta[])
     
     # For WAIC
-    like[i] <- dnorm(Y[i],mu[i],tau)
+    # like[i] <- dnorm(Y[i],mu[i],tau)
   } 
     
   # Priors  
@@ -169,6 +148,7 @@ model_string1 <- textConnection("model{
     
   alpha ~  dnorm(0, 0.01) 
   tau   ~  dgamma(0.1, 0.1) 
+  sigma <- 1/sqrt(tau)
     
   # Posterior Predicitve Checks
   for(i in 1:n){
@@ -179,14 +159,23 @@ model_string1 <- textConnection("model{
   D1[3] <- max(Yppc[]) - min(Yppc[])
   D1[4] <- mean(Yppc[])
   D1[5] <- sd(Yppc[])
+  
+  # Predictions
+  for(i in 1:n_pred){
+    Ypred[i] ~ dnorm(mu_pred[i], tau)
+    mu_pred[i] <- alpha + inprod(Xpred[i,], beta[])
+  }
 }")
 
 ### Compile Model Inputs ----
 data1   <- list(Y = Y1train,
                 X = X1train,
                 n = n1train,
-                p = p1)
-params1 <- c("alpha", "beta", "D1")
+                p = p1,
+                Xpred = X1test,
+                n_pred = n1test
+)
+params1 <- c("alpha", "beta", "sigma", "D1", "Yppc", "Ypred")
 
 inits <- list(
   list(.RNG.name = "base::Mersenne-Twister", .RNG.seed = 52),
@@ -199,8 +188,8 @@ inits <- list(
 tic()
 model1 <- jags.model(model_string1, data=data1, inits = inits,
                      n.chains=2, quiet=FALSE)
-update(model1, burn, progress.bar="text")
-samples1 <- coda.samples(model1, variable.names=params1, n.iter=n.iter, n.thin=thin, 
+update(model1, burn1, progress.bar="text")
+samples1 <- coda.samples(model1, variable.names=params1, n.iter=n.iters1, n.thin=thin1, 
                          progress.bar="text")
 toc()
 # Stop here
@@ -210,15 +199,15 @@ toc()
 # Make sure to reload libraries after termination if it occurs
 filename1 <- paste0(
   "Model 1 Fit Data ", 
-  "(B", burn, "-",
-  "I", n.iter, "-",
-  "T", thin, 
+  "(B", burn1, "-",
+  "I", n.iters1, "-",
+  "T", thin1, 
   ").RData"
 )
 save(
   list = setdiff(
     ls(.GlobalEnv), 
-    c("bleaching_data", "final_data1", "final_data2")
+    c("bleaching_data")
   ),
   file = filename1
 )
@@ -226,15 +215,18 @@ save(
 # Use this if R session terminates
 # load(file = "Model 1 Fit Data.RData")
 
+### Save samples by variables ----
+samples1A <- samples1[[1]]
+samples1B <- samples1[[2]]
+colnames(samples1A)
+
+#### Parameters ----
+paramSamps1A <- samples1A[,c(602:610)]
+paramSamps1B <- samples1B[,c(602:610)]
+
 ### Convergence Diagnostics ----
 #### Trace Plots ----
-# Trace and Density plots
-# color_scheme_set("mix-blue-red")
-# mcmc_trace(samples1)
-# mcmc_rank_overlay(samples1)
-# dimnames(samples1)
-par(mar=c(1,1,1,1))
-plot(samples1)
+
 
 # Remove plots if it is bogging down environment
 dev.off()
@@ -279,11 +271,11 @@ DPrintnames <- c(
 
 # Calculate observed values for checks
 D0 <- c(
-  min(Y1),
-  max(Y1),
-  max(Y1) - min(Y1),
-  mean(Y1),
-  sd(Y1)
+  min(Y1train),
+  max(Y1train),
+  max(Y1train) - min(Y1train),
+  mean(Y1train),
+  sd(Y1train)
 )
 names(D0) <- DPrintnames
 
@@ -356,21 +348,6 @@ dic1
 WAIC1
 P1
 
-## FINAL SAVE ----
-save(list = setdiff(
-  ls(.GlobalEnv), 
-  c("waic1", "like1", "bleaching_data", "final_data1", "final_data2")
-),
-file = filename1
-)
-
-# Delete the other previous RData files now to push to GitHub
-file.remove("Model 1 DIC.Rdata")
-file.remove("Model 1 WAIC.Rdata")
-
-# Remove data to free up space in environment (we can load it later to compare models)
-# rm(list=setdiff(ls(), c("bleaching_data", "final_data3")))
-
 ## Cross Validation ----
 # Observed data
 Y1o <- Y1[trainIndex] # Observed (Y1train)
@@ -412,14 +389,17 @@ model_string <- "model{
 
 # NOTE: Y1p is not sent to JAGS!
 model1_cv <- jags.model(textConnection(model_string), 
-                    data = list(Y1o=Y1o,n1o=n1o,n1p=n1p,p1=p1,X1o=X1o,X1p=X1p))
-update(model, 10000, progress.bar="none")
-samp1_cv <- coda.samples(model, 
-                     variable.names=c("alpha", "beta", "Y1p"), 
-                     n.iter=20000, progress.bar="text")
+                        data = list(Y1o=Y1o,n1o=n1o,n1p=n1p,p1=p1,X1o=X1o,X1p=X1p))
+update(model1_cv, burn1, progress.bar="none")
+samp1_cv <- coda.samples(model1_cv, 
+                         variable.names=c("alpha", "beta", "Y1p"), 
+                         n.iter=n.iters1, progress.bar="text")
+
+#### SAVE CHECKPOINT ----
+save(dic1, file = "Model 1 DIC.RData")
 
 # Summary
-summary1_cv <- summary(samp[,-c(1:n1p)])
+summary1_cv <- summary(samp1_cv[,-c(1:n1p)])
 summary1_cv
 
 # Extract the samples for each parameter
@@ -430,15 +410,15 @@ beta.samps1  <- samps1[,n1p+1+1:p1]
 sigma.samps1  <- samps1[,ncol(samps1)]
 
 # Beta means
-beta.mn1  <- colMeans(beta.samps)
+beta.mn1  <- colMeans(beta.samps1)
 beta.mn1
 
 # Sigma mean
-sigma.mn1 <- mean(sigma.samps)
+sigma.mn1 <- mean(sigma.samps1)
 sigma.mn1
 
 # Alpha (intercept) mean
-alpha.mn1 <- mean(alpha.samps)
+alpha.mn1 <- mean(alpha.samps1)
 alpha.mn1
 
 # Graphical representation of plug-in vs PPD vs truth
@@ -447,7 +427,7 @@ for(j in 1:10){
   
   # Plug-in
   mu <- alpha.mn1+sum(X1p[j,]*beta.mn1)
-  y  <- rnorm(20000,mu,sigma.mn1)
+  y  <- rnorm(n.iters1,mu,sigma.mn1)
   plot(density(y),col=2,xlab="Y",main="PPD")
   
   # PPD
@@ -486,46 +466,92 @@ df_mu1 <- as.matrix(df_mu1)
 Y1p <- as.matrix(Y1p)
 
 # Create empty data frame to store values
-est1 <- data.frame()
+est1 <- c()
 
 # Looping through and taking the abs difference of the two vectors
 for(i in 1:n1p){
   diff <- abs(Y1p[i]-df_mu1[i])
-  est1  <- rbind(est1, diff)
+  est1[i]  <- diff
 }
 
 # First column of the est1 data frame has wonky name
-mean_abs_error <- mean(est1$X5.43069500446891)
-mean_abs_error
+mean_abs_error1 <- mean(est1)
+mean_abs_error1
+
+## FINAL SAVE ----
+save(list = setdiff(
+  ls(.GlobalEnv), 
+  c("waic1", "like1", "bleaching_data", "final_data1", "final_data2")
+),
+file = filename1
+)
+
+# Delete the other previous RData files now to push to GitHub
+file.remove("Model 1 DIC.Rdata")
+file.remove("Model 1 WAIC.Rdata")
+
+# Remove data to free up space in environment (we can load it later to compare models)
+# rm(list=setdiff(ls(), c("bleaching_data", "final_data3")))
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-## Model 2: Beta Regression Model (Hanan) ----
-## Following most of Rachel's code but with slight modifications to accommodate for the new model
+# Model 2: Beta Regression Model =====
 ## Modeled with Uninformative Gaussian Priors
-final_hanan <- final_data3
-final_hanan <- na.omit(final_hanan)
-Y_2 <- final_hanan$Percent_Bleaching 
-Y2 <- Y_2 / 100 # Changing response variable to decimal to fit criteria
-mean(Y2)
-sd(Y2)
-# Change 0's to 0.00001 and 1's to 0.99999 to avoid infinite density
-Y2 <- ifelse(Y2 == 0, 0.00001, 
-             ifelse(Y2 == 1, 0.99999, Y2))
+
+## Load Data ----
+### Closed Support Data ----
+## Y2 is original data with closed support [0,100]
+Y2 <- final_data3$Percent_Bleaching_Open
+Y2 <- Y2 / 100 # Changing response variable to decimal to fit criteria
 mean(Y2)
 sd(Y2)
 
-X2 <- subset(final_hanan, select = -c(Date, Date_Year, Exposure, Percent_Bleaching))
-X2 <- subset(X2, select = -c(Turbidity, SSTA, TSA, Windspeed))
-X2 <- as.matrix(X2)
+### Covariate Matrix ----
+## Variables removed were from multiple linear regression with no random
+## effects. Feel Free to modify this X1 for your specific model if needed
+## but rename it X2 for model and so on. Same with Y's just to avoid
+## writing over someone 
+X2 <- final_data3 |> 
+  select(-c(
+    Date,
+    City_Town_Name,
+    Latitude_Degrees,
+    Longitude_Degrees,
+    Date_Month,
+    Turbidity,
+    Exposure,
+    ClimSST,
+    SSTA,
+    SSTA_DHW,
+    Windspeed,
+    Depth_m,
+    Percent_Bleaching,
+    Percent_Bleaching_Open,
+    Percent_Bleaching_Log
+  ))
+#X2$Exposure <- ifelse(X2$Exposure == "Sheltered", 0, 1)
 X2 <- scale(X2)
 
-n2 <- length(Y2)
-p2 <- ncol(X2)
+#### Split Data ----
+Y2train <- Y2[trainIndex]
+Y2test <- Y2[-trainIndex]
+X2train <- X2[trainIndex,]
+X2test <- X2[-trainIndex,]
 
-burn     <- 200
-n.iter   <- 400
-thin     <- 5
+## Simulation Variables ----
+n2train <- length(Y2train)
+n2test <- length(Y2test)
+p2 <- ncol(X2train)
 
+## Test models with this these simulation variables:
+burn2 <- 2000
+n.iters2 <- 4000
+thin2 <- 5
+## We will increase to final model
+# burn     <- 5000
+# n.iter   <- 10000
+# thin     <- 5
+
+## Define Model ----
 model_string2 <- textConnection("model{
     # Likelihood
     for(i in 1:n){
@@ -533,7 +559,7 @@ model_string2 <- textConnection("model{
       logit(mu[i]) <- alpha + inprod(X[i,], beta[])
       
       # For WAIC
-      like[i]    <- dbeta(Y[i], mu[i]*phi, (1-mu[i])*phi)
+      # like[i]    <- dbeta(Y[i], mu[i]*phi, (1-mu[i])*phi)
     } 
     
     # Priors  
@@ -553,84 +579,162 @@ model_string2 <- textConnection("model{
     D2[3] <- max(Yppc[]) - min(Yppc[])
     D2[4] <- mean(Yppc[])
     D2[5] <- sd(Yppc[])
+    
+    # Predictions
+    for(i in 1:n_pred){
+      Ypred[i] ~ dbeta(mu_pred[i]*phi, (1-mu_pred[i])*phi) 
+      logit(mu_pred[i]) <- alpha + inprod(Xpred[i,], beta[])
+    }
       
 }")
 
-data2   <- list(Y=Y2,X=X2,n=n2,p=p2)
-params2 <- c("alpha", "beta", "D2")
+### Compile Model Inputs ----
+data2   <- list(Y = Y2train,
+                X = X2train,
+                n = n2train,
+                p = p2,
+                Xpred = X2test,
+                n_pred = n2test
+)
+params2 <- c("alpha", "beta", "phi", "D2", "Yppc", "Ypred")
 
 inits <- list(
   list(.RNG.name = "base::Mersenne-Twister", .RNG.seed = 52),
   list(.RNG.name = "base::Mersenne-Twister", .RNG.seed = 8)
 )
 
+## Fit Model ----
 ## Run this all at once to get how long it took
 # Start here
 tic()
 model2 <- jags.model(model_string2, data=data2, inits = inits,
-                     n.chains=2, quiet=TRUE)
-#error persists. i've tried increasing burn in. next objective, is to review priors or perhaps 
-#try using a different sampler.
-# (tyler) did not receive any errors after changing min and max values but model took forever and I
-# didn't have the patience to wait 
-update(model2, burn, progress.bar="none")
-samples2 <- coda.samples(model2, variable.names=params2, n.iter=n.iter, n.thin=thin, progress.bar="none")
+                     n.chains=2, quiet=FALSE)
+update(model2, burn2, progress.bar="text")
+samples2 <- coda.samples(model2, variable.names=params2, n.iter=n.iters2,
+                         n.thin=thin2, progress.bar="text")
 toc()
 # Stop here
 
+### SAVE CHECKPOINT ----
 # Save RData in case code aborts and causes termination
-save(
-  final_data3,
-  final_hanan,
-  model2,
-  samples2,
-  X2,
-  Y2,
-  n2,
-  p2,
-  file = "Model 2 Data.RData"
+# Make sure to reload libraries after termination if it occurs
+filename2 <- paste0(
+  "Model 2 Fit Data ", 
+  "(B", burn2, "-",
+  "I", n.iters2, "-",
+  "T", thin2, 
+  ").RData"
 )
-
+save(
+  list = setdiff(
+    ls(.GlobalEnv), 
+    c("bleaching_data")
+  ),
+  file = filename2
+)
 # Use this if R session terminates
-# load(file = "Model 1 Data.RData")
+# load(file = "Model 2 Fit Data.RData")
 
-summary2 <- summary(samples2)
-summary2
+### Parse Samples by Variable ----
+samples2A <- samples2[[1]]
+samples2B <- samples2[[2]]
 
-# ^This is because of the error: "figure margins too large"
-# Unfortunately it makes the plots kinda wonky but at least we can see them.
-plot(samples2)
+#### Parameters ----
+paramSamps2A <- samples2A[ ,2400:2406]
+paramSamps2B <- samples2B[ ,2400:2406]
+colnames(paramSamps2A) <- c("Intercept", colnames(X2), "phi")
+colnames(paramSamps2B) <- c("Intercept", colnames(X2), "phi")
+paramSamps2 <- mcmc.list(paramSamps2A,paramSamps2B)
+paramSamps2C <- as_draws_array(paramSamps2)
 
-# This reduces chance of crashing
+#### PPCs ----
+##### Data ----
+YppcSamps2A <- samples2A[ ,6:1803]
+YppcSamps2B <- samples2B[ ,6:1803]
+YppcSamps2 <- mcmc.list(YppcSamps2A,YppcSamps2B)
+
+##### Checks ----
+ppcSamps2A <- samples2A[ ,1:5]
+ppcSamps2B <- samples2B[ ,1:5]
+DPrintnames <- c(
+  "Min of Y",
+  "Max of Y",
+  "Range of Y",
+  "Mean of Y",
+  "SD of Y"
+)
+colnames(ppcSamps2A) <- DPrintnames
+colnames(ppcSamps2B) <- DPrintnames
+ppcSamps2 <- mcmc.list(ppcSamps2A,ppcSamps2B)
+
+#### PPDs ----
+ppdSamps2A <- samples2A[ ,1804:2399]
+ppdSamps2B <- samples2B[ ,1804:2399]
+ppdSamps2 <- mcmc.list(ppdSamps2A, ppdSamps2B)
+PPDcomb2 <- rbind(ppdSamps2A,ppdSamps2B)
+
+
+
+### Convergence Diagnostics ----
+#### Trace Plots ----
+# Trace and Density plots
+color_scheme_set("teal")
+#color_scheme_set("brewer-Dark2")
+mcmc_combo(paramSamps2,
+           combo = c("trace", "dens_overlay"),
+           # pars = c("alpha", 
+           #          paste0("beta[", 1:p2, "]"),
+           #          "phi"),
+           widths = c(2,1))
+
+# mcmc_rank_overlay(samples1)
+# dimnames(samples1)
+#plot(paramSamps2A)
+
+# Remove plots if it is bogging down environment
 dev.off()
 
-stats2 <- summary2$statistics[-c(1:5),]
-rownames(stats2) <- c("Intercept", "Latitude", "Longitude",
-                      "Distance to Shore", 
-                      "Cyclone Frequency", "Depth", "ClimSST",
-                      "SSTA_DHW", "TSA_DHW")
+#### Effective Sample Size ----
+# Checking the effective sample sizes.
+# All effective sample sizes are very high, well over 10,000!
+effectiveSize(paramSamps2)
+
+#### Gelman-Rubin Diagnostics ----
+# R less than 1.1 indicates convergence.
+gelman.diag(paramSamps2)
+
+#### Geweke Diagnostics ----
+# abs(z) less than 2 indicates convergence.
+geweke.diag(paramSamps2)
+
+### Model Summaries ----
+summary2 <- summary(paramSamps2)
+
+#### Parameter Estimates ----
+stats2 <- summary2$statistics
 stats2
 
-quantiles2 <- summary2$quantiles[-c(1:5),]
-rownames(quantiles2) <- c("Intercept", "Latitude", "Longitude",
-                          "Distance to Shore", 
-                          "Cyclone Frequency", "Depth", "ClimSST",
-                          "SSTA_DHW", "TSA_DHW")
+#### Parameter 95% CIs ----
+# CI = Credible Interval
+quantiles2 <- summary2$quantiles
 quantiles2
 
-# All of the predictors used above were deemed significant.
+#### Plot parameter distributions
+mcmc_areas(
+  paramSamps2,
+  pars = colnames(X2),
+  point_est = "mean",
+  prob = 0.95) +
+  labs(
+    title = "Posterior Distributions of Predictors",
+    subtitle = "95% Credible Interval about the Point Estimate"
+  ) +
+  vline_0() +
+  theme_bw()
 
-### Goodness of Fit Checks for Model 2 ----
-# Checking the effective sample sizes.
-effectiveSize(samples2)
-
-# R less than 1.1 indicates convergence.
-gelman.diag(samples2)
-
-# abs(z) less than 2 indicates convergence.
-geweke.diag(samples2[[1]])
-
-#### Posterior Predictive Checks ----
+## Goodness of Fit Checks ----
+### Posterior Predictive Checks ----
+# Create naming vector to be used throughout checks and plots
 DPrintnames <- c(
   "Min of Y",
   "Max of Y",
@@ -639,73 +743,306 @@ DPrintnames <- c(
   "SD of Y"
 )
 
-D0B <- c(
-  min(Y2),
-  max(Y2),
-  max(Y2) - min(Y2),
-  mean(Y2),
-  sd(Y2)
+# Calculate observed values for checks
+D0 <- c(
+  min(Y2train),
+  max(Y2train),
+  max(Y2train) - min(Y2train),
+  mean(Y2train),
+  sd(Y2train)
 )
-names(D0B) <- DPrintnames
+names(D0) <- DPrintnames
 
+# Chain 1 PPCs
 D2A <- samples2[[1]][,1:5]
 colnames(D2A) <- DPrintnames
 
+# Chain 2 PPCs
 D2B <- samples2[[2]][,1:5]
 colnames(D2B) <- DPrintnames
 
+# Create empty vectors to store Bayesian p-values for each chain
 pval2A <- rep(0, 5)
 names(pval2A) <- DPrintnames
 pval2B <- rep(0, 5)
 names(pval2B) <- DPrintnames
 
+# For all plots in one
+par(mfrow = c(3,2))
+
+# For individual plots
+# dev.off()
+
 for(j in 1:5){
   plot(density(D2B[,j]), xlab = "D", ylab = "Posterior Probability", 
-       xlim = c(min(D2B[,j], D2A[,j], D0B[j]), 
-                max(D2B[,j], D2A[,j], D0B[j])), 
+       xlim = c(min(D2B[,j], D2A[,j], D0[j]), 
+                max(D2B[,j], D2A[,j], D0[j])), 
        main = DPrintnames[j])
-  lines(density(D2A[,j]), col = "blue")
-  abline(v = D0B[j], col = "green", lwd = 2)
-  legend("topleft", c("D2B", "D2A", "Observed"), 
+  lines(density(D2B[,j]), col = "blue")
+  abline(v = D0[j], col = "green", lwd = 2)
+  legend("topleft", c("D1B", "D2A", "Observed"), 
          col = c("black", "blue", "green"), lwd = 2)
   
-  pval2A[j] <- mean(D2A[,j] > D0B[j])
-  pval2B[j] <- mean(D2B[,j] > D0B[j])
+  pval2A[j] <- mean(D2B[,j] > D0[j])
+  pval2B[j] <- mean(D2B[,j] > D0[j])
 }
 pval2A
 pval2B
 
-### Model Comparison ----
-# Compute DIC
-dic2   <- dic.samples(model2, n.iter=n.iter, progress.bar="none")
+# Remove plots if it is bogging down environment
+dev.off()
 
-# Compute WAIC
-waic2   <- coda.samples(model2, 
-                        variable.names=c("like"), 
-                        n.iter=n.iter, progress.bar="none")
+#### Plot all PPCs ----
+#### and calculate p-values
+# May end up converting this to ggplot for report
+ppc_obsN2 <- 30
+ppc_obs2 <- sample(1:length(Y2train), ppc_obsN2)
+ppc_density_plot2 <- ppc_dens_overlay(
+  Y2train, YppcSamps2A[ppc_obs2,]) +
+  labs(title = "Posterior Predictive Checks vs Training Set",
+       subtitle = "N = 30 Randomly selected posteriors from JAGS") +
+  theme_bw() +
+  legend_none()
 
-save(dic2, waic2, file = "Model 2 Comps.RData")
+ppc_q2.5_plot2 <- ppc_stat(
+  Y2train, YppcSamps2A, 
+  stat = function(y) quantile(y, 0.025)) +
+  labs(title = "2.5% Quantile") +
+  theme_bw() +
+  legend_none()
+ppc_q97.5_plot2 <- ppc_stat(
+  Y2train, YppcSamps2A, 
+  stat = function(y) quantile(y, 0.975)) +
+  labs(title = "97.5% Quantile") +
+  theme_bw() +
+  legend_none()
+ppc_median_plot2 <- ppc_stat(
+  Y2train, YppcSamps2A, 
+  stat = "median") +
+  labs(title = "Median") +
+  theme_bw() +
+  legend_none()
+ppc_mad_plot2 <- ppc_stat(
+  Y2train, YppcSamps2A, 
+  stat = "mad") +
+  labs(title = "MAD") +
+  theme_bw() +
+  legend_none()
+ppc_mean_plot2 <- ppc_stat(
+  Y2train, YppcSamps2A, 
+  stat = "mean") +
+  labs(title = "Mean") +
+  theme_bw() +
+  legend_none()
+ppc_sd_plot2 <- ppc_stat(
+  Y2train, YppcSamps2A, 
+  stat = "sd") +
+  labs(title = "Standard Deviation") +
+  theme_bw() +
+  legend_none()
 
-like2   <- waic2[[1]]
-fbar2   <- colMeans(like2)
-P2      <- sum(apply(log(like2),2,var))
-WAIC2   <- -2*sum(log(fbar2))+2*P2
+ppc_lay2 <- rbind(c(1,1),
+                  c(2,3),
+                  c(4,5),
+                  c(6,7)
+)
+bayesplot_grid(
+  plots = list(
+    ppc_density_plot2,
+    ppc_q2.5_plot2,
+    ppc_q97.5_plot2,
+    ppc_median_plot2,
+    ppc_mad_plot2,
+    ppc_mean_plot2,
+    ppc_sd_plot2),
+  grid_args = list(
+    layout_matrix = ppc_lay2
+  )
+)
 
-dic2
-WAIC2
-P2
+# Remove saved plots for saving
+rm(ppc_density_plot2, ppc_q2.5_plot2, ppc_median_plot2, ppc_q97.5_plot2,
+   ppc_mean_plot2, ppc_sd_plot2)
 
-### Save Model 2 data ----
-save(list = setdiff(ls(.GlobalEnv), c("waic2", "like2")),
-     file = "Model 2 All Data.Rdata")
+#### Plot PDDs ----
+PPDmean2 <- apply(PPDcomb2, 2, mean)
+PPDmedian2 <- apply(PPDcomb2, 2, median)
+PPDlb2 <- apply(PPDcomb2, 2, function(x) quantile(x, 0.025))
+PPDub2 <- apply(PPDcomb2, 2, function(x) quantile(x, 0.975))
+
+PPDcomb2B <- mcmc(PPDcomb2)
+
+deviance2A <- abs(PPDmedian2 - Y2test)
+MAD2B <- mean(deviance2A)
+
+yt <- example_y_data()
+yrept <- example_yrep_draws()
+yreptMed <- apply(yrept, 2, median)
+mean(abs(yreptMed - yt))
+mean(abs(median(yrept)))
+
+ppc_stat(yt, yrept, stat = "mad") + theme_bw()
+
+ppdComb_density_plot2 <- ppc_dens_overlay(
+  Y2test, PPDcomb2) +
+  labs(title = "Posterior Predictive Distribution vs Test Set",
+       subtitle = "N = 30 Randomly selected posteriors from JAGS") +
+  theme_bw() +
+  legend_none()
+ppdComb_density_plot2
+
+
+ppdComb_density_plot2B <- ppc_dens_overlay(
+  Y2test, PPDcomb2) +
+  labs(title = "Posterior Predictive Distribution vs Test Set",
+       subtitle = "95% Credible Interval about Mean") +
+  theme_bw() +
+  legend_none()
+ppdComb_density_plot2B
+
+ppdComb_density_plot2B <- ppc_dens_overlay_data(
+  Y2test, PPDcomb2)
+
+ppd_ribbon(PPDcomb2, prob = 0.95)
+
+ppd_obsN2 <- 30
+ppd_obs2 <- sample(1:length(Y2test), ppc_obsN2)
+ppd_density_plot2 <- ppc_dens_overlay(
+  Y2test, PPDcomb2[ppc_obs2,]) +
+  labs(title = "Posterior Predictive Distribution vs Test Set",
+       subtitle = "N = 30 Randomly selected posteriors from JAGS") +
+  theme_bw() +
+  legend_none()
+
+ppd_q2.5_plot2 <- ppc_stat(
+  Y2test, PPDcomb2, 
+  stat = function(y) quantile(y, 0.025)) +
+  labs(title = "2.5% Quantile") +
+  theme_bw() +
+  legend_none()
+
+ppd_q97.5_plot2 <- ppc_stat(
+  Y2test, PPDcomb2, 
+  stat = function(y) quantile(y, 0.975)) +
+  labs(title = "97.5% Quantile") +
+  theme_bw() +
+  legend_none()
+
+ppd_median_plot2 <- ppc_stat(
+  Y2test, PPDcomb2, 
+  stat = "median") +
+  labs(title = "Median") +
+  theme_bw() +
+  legend_none()
+
+ppd_mad_plot2 <- ppc_stat(
+  Y2test, PPDcomb2, 
+  stat =  "mad") +
+  labs(title = "MAD") +
+  theme_bw() +
+  legend_none()
+
+
+ggplot() +
+  geom_density(aes(x = deviance2A))
+
+
+ppd_mse_plot2 <- ppc_stat(
+  Y2test, PPDcomb2, 
+  stat = "mse") +
+  labs(title = "MSE") +
+  theme_bw() +
+  legend_none()
+
+ppd_mean_plot2 <- ppc_stat(
+  Y2test, PPDcomb2, 
+  stat = "mean") +
+  labs(title = "Mean") +
+  theme_bw() +
+  legend_none()
+
+ppd_sd_plot2 <- ppc_stat(
+  Y2test, PPDcomb2, 
+  stat = "sd") +
+  labs(title = "Standard Deviation") +
+  theme_bw() +
+  legend_none()
+
+ppd_lay2 <- rbind(c(1,1),
+                  c(2,3),
+                  c(4,5),
+                  c(6,7)
+)
+bayesplot_grid(
+  plots = list(
+    ppd_density_plot2,
+    ppd_q2.5_plot2,
+    ppd_q97.5_plot2,
+    ppd_median_plot2,
+    ppd_mad_plot2,
+    ppd_mean_plot2,
+    ppd_sd_plot2),
+  grid_args = list(
+    layout_matrix = ppd_lay2
+  )
+)
+
+
+## Model Comparison ----
+### DIC ----
+# dic2   <- dic.samples(model2, n.iter=2000, progress.bar="text")
+# 
+# #### SAVE CHECKPOINT ----
+# save(dic2, file = "Model 2 DIC.RData")
+# 
+# ### WAIC ----
+# waic2   <- coda.samples(model2, 
+#                         variable.names=c("like"), 
+#                         n.iter=2000, progress.bar="text")
+# 
+# #### SAVE CHECKPOINT ----
+# save(waic2, file = "Model 2 WAIC.RData")
+# 
+# #### Manually Compute WAIC and P ----
+# like2   <- waic2[[1]]
+# fbar2   <- colMeans(like2)
+# P2      <- sum(apply(log(like2),2,var))
+# WAIC2   <- -2*sum(log(fbar2))+2*P2
+# 
+# ### Output Results ----
+# dic2
+# WAIC2
+# P2
+
+## FINAL SAVE ----
+save(list = setdiff(
+  ls(.GlobalEnv), 
+  c("bleaching_data")),
+  file = filename2
+)
+
+save(
+  final_data3,
+  samples2,
+  paramSamps2,
+  ppcSamps2,
+  YppcSamps2,
+  ppdSamps2,
+  quantiles2,
+  stats2,
+  Y2,
+  Y2test,
+  Y2train,
+  X2,
+  X2train,
+  X2test,
+  trainIndex,
+  file = filename2
+)
 
 # Delete the other previous RData files now to push to GitHub
-file.remove("Model 2 Data.Rdata")
-file.remove("Model 2 Comps.Rdata")
+file.remove("Model 2 DIC.RData")
+file.remove("Model 2 WAIC.RData")
 
 # Remove data to free up space in environment (we can load it later to compare models)
 rm(list=setdiff(ls(), c("bleaching_data", "final_data3")))
-
-
-
-

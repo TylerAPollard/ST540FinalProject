@@ -12,6 +12,8 @@ library(GGally)
 library(tidyverse)
 library(caret)
 library(tictoc)
+library(brms)
+library(BayesFactor)
 
 # Read in Global Bleaching data ----
 bleaching_data <- fread("global_bleaching_environmental.csv", 
@@ -320,6 +322,16 @@ byYear_EDA <- ddply(final_data3, .(Date_Year), summarize,
                     Percent_Bleaching = byYearfun(Percent_Bleaching))
 
 temp_data <- final_data3 |> select(
+  Distance_to_Shore,
+  Cyclone_Frequency,
+  Date_Year,
+  TSA,
+  TSA_DHW,
+  Percent_Bleaching
+)
+ggpairs(temp_data)
+
+temp_data <- final_data3 |> select(
   ClimSST,
   SSTA,
   SSTA_DHW,
@@ -350,6 +362,16 @@ ddply(final_data3, .(Date_Year), summarize,
       Obs = length(Percent_Bleaching),
       Mean = mean(Percent_Bleaching))
 
+trainIndex
+testIndex <- 1:2394
+testIndex <- testIndex[-trainIndex]
+
+final_data_pred2 <- final_data3 |>
+  select(Latitude_Degrees, Longitude_Degrees) |>
+  slice(testIndex)
+final_data_pred2$Percent_Bleaching_Mean <- YppdMean2
+final_data_pred2$Percent_Bleaching_Meed <- YppdMedian2
+
 world_coordinates <- map_data("county") 
 ggplot() + 
   # geom_map() function takes world coordinates  
@@ -359,14 +381,14 @@ ggplot() +
     aes(x = long, y = lat, map_id = region) 
   ) + 
   geom_point(
-    data = final_data3,
+    data = final_data_pred2,
     aes(x = Longitude_Degrees, y = Latitude_Degrees, 
-        color = Percent_Bleaching)
+        color = Percent_Bleaching_Mean)
   ) +
   xlim(c(-85,-77.5)) +
   ylim(c(23,32.5)) +
   scale_color_continuous(low = "green", high = "red") +
-  facet_wrap(vars(City_Town_Name)) +
+  #facet_wrap(vars(City_Town_Name)) +
   theme_bw()
 
 
